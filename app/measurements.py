@@ -6,13 +6,13 @@ from typing import Any
 
 from pyproj import CRS, Transformer
 from shapely.geometry import shape
-from shapely.ops import transform
+from shapely import transform
 
 
 def _measurement_crs(geometry: Any, source_crs: CRS, *, equal_area: bool) -> CRS:
     """Pick a local metric CRS centered on a feature's WGS84 centroid."""
     to_wgs84 = Transformer.from_crs(source_crs, CRS.from_epsg(4326), always_xy=True)
-    geographic_geometry = transform(to_wgs84.transform, geometry)
+    geographic_geometry = transform(geometry, to_wgs84.transform, interleaved=False)
     centroid = geographic_geometry.centroid
     longitude = ((centroid.x + 180.0) % 360.0) - 180.0
     latitude = max(-90.0, min(90.0, centroid.y))
@@ -37,7 +37,7 @@ def _project_and_measure(
 ) -> float:
     target_crs = _measurement_crs(geometry, source_crs, equal_area=equal_area)
     transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
-    projected = transform(transformer.transform, geometry)
+    projected = transform(geometry, transformer.transform, interleaved=False)
     return float(projected.area if equal_area else projected.length)
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -10,16 +11,18 @@ from app.geospatial import MAX_UPLOAD_BYTES, read_features
 from app.measurements import measure_features
 from app.storage import get_file, initialize, save_file
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize()
+    yield
+
+
 app = FastAPI(
     title="Geospatial File Measurement API",
     description="Upload KML or zipped Shapefile data and retrieve feature measurements.",
     version="1.0.0",
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    initialize()
 
 
 @app.post("/api/files/", status_code=201, tags=["files"])

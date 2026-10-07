@@ -33,6 +33,11 @@ def _validate_archive(archive_path: Path, destination: Path) -> Path:
                 normalized = PurePosixPath(member.filename.replace("\\", "/"))
                 if normalized.is_absolute() or ".." in normalized.parts:
                     raise HTTPException(422, "The ZIP archive contains an unsafe file path.")
+                if any(":" in part or "\x00" in part for part in normalized.parts):
+                    raise HTTPException(422, "The ZIP archive contains an unsafe file path.")
+                unix_mode = member.external_attr >> 16
+                if unix_mode and (unix_mode & 0o170000) == 0o120000:
+                    raise HTTPException(422, "The ZIP archive may not contain symbolic links.")
                 if member.is_dir():
                     continue
                 suffix = normalized.suffix.lower()
@@ -83,16 +88,17 @@ def read_features(filename: str, content: bytes) -> tuple[list[dict[str, Any]], 
             source = root / "upload.zip"
             source.write_bytes(content)
             data_path = _validate_archive(source, root / "extracted")
-            driver = "ESRI Shapefile"
         else:
             data_path = root / "upload.kml"
             data_path.write_bytes(content)
-            driver = "KML"
 
         try:
-            frame = gpd.read_file(data_path, driver=driver, engine="pyogrio")
+            frame = gpd.read_file(data_path, engine="pyogrio")
         except Exception as exc:
-            raise HTTPException(422, f"Unable to read geospatial file: {exc}") from exc
+            raise HTTPException(
+                422,
+                "Unable to read geospatial file. Confirm that it is valid and contains supported vector data.",
+            ) from exc
 
     crs = frame.crs.to_string() if frame.crs is not None else None
     records: list[dict[str, Any]] = []
